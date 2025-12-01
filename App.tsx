@@ -1,12 +1,12 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { v4 as uuidv4 } from 'uuid';
-import { Map, LayoutDashboard, Database, Home, LandPlot, CheckCircle2, Clock, Loader2, Smartphone, LogIn, LogOut, ShieldCheck } from 'lucide-react';
+import { Map, LayoutDashboard, Database, Home, LandPlot, CheckCircle2, Clock, Loader2, Smartphone, LogIn, LogOut, ShieldCheck, Cloud, WifiOff } from 'lucide-react';
 import { LandForm } from './components/LandForm';
 import { LandTable } from './components/LandTable';
 import { LoginForm } from './components/LoginForm';
 import { UserManagement } from './components/UserManagement';
 import { LandRecord, LandRecordFormData, MeasurementStatus, Village, User } from './types';
-import { getRecords, saveRecord, updateRecord, deleteRecord, saveManyRecords } from './services/storageService';
+import { getRecords, saveRecord, updateRecord, deleteRecord, saveManyRecords, getStorageStatus } from './services/storageService';
 
 const App: React.FC = () => {
   const [records, setRecords] = useState<LandRecord[]>([]);
@@ -15,6 +15,7 @@ const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [isInstallable, setIsInstallable] = useState(false);
+  const [storageStatus, setStorageStatus] = useState('CHECKING');
   
   // Auth State
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -25,6 +26,7 @@ const App: React.FC = () => {
     const loadData = async () => {
       setIsLoading(true);
       try {
+        setStorageStatus(getStorageStatus());
         const data = await getRecords();
         // Sort by most recent
         setRecords(data.sort((a, b) => b.createdAt - a.createdAt));
@@ -226,6 +228,7 @@ const App: React.FC = () => {
   // Check if current user is Super Admin
   const isSuperAdmin = currentUser?.isSuperAdmin;
   const canSeeForm = isSuperAdmin || currentUser?.permissions.canAdd || currentUser?.permissions.canEdit;
+  const isCloud = storageStatus.includes('CLOUD');
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
@@ -246,7 +249,13 @@ const App: React.FC = () => {
             </div>
             <div>
               <h1 className="text-xl font-bold text-gray-900 tracking-tight">GeoMayora</h1>
-              <p className="text-xs text-gray-500 font-medium hidden sm:block">Sistem Input Bidang Tanah</p>
+              <div className="flex items-center text-xs space-x-2">
+                 <span className="text-gray-500 font-medium hidden sm:block">Sistem Input Bidang Tanah</span>
+                 <span className={`flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold ${isCloud ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'}`}>
+                    {isCloud ? <Cloud className="w-3 h-3 mr-1" /> : <WifiOff className="w-3 h-3 mr-1" />}
+                    {isCloud ? 'ONLINE' : 'OFFLINE'}
+                 </span>
+              </div>
             </div>
           </div>
           <div className="flex items-center space-x-3">
@@ -288,6 +297,17 @@ const App: React.FC = () => {
 
       <main className="flex-1 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full">
         
+        {/* Connection Alert */}
+        {!isCloud && (
+           <div className="mb-4 bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded-lg text-sm flex items-start">
+              <WifiOff className="w-5 h-5 mr-2 mt-0.5 flex-shrink-0" />
+              <div>
+                <strong>Mode Offline (Lokal).</strong> Database saat ini hanya tersimpan di browser ini. 
+                Untuk mengaktifkan database online (server), silakan konfigurasi <code>firebaseConfig.ts</code>.
+              </div>
+           </div>
+        )}
+
         {/* User Status Banner */}
         {currentUser && (
           <div className={`mb-6 px-4 py-3 rounded-lg shadow-md flex items-center justify-between ${isSuperAdmin ? 'bg-emerald-700 text-white' : 'bg-blue-600 text-white'}`}>
@@ -432,7 +452,7 @@ const App: React.FC = () => {
             {isLoading ? (
                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 flex flex-col items-center justify-center h-64">
                  <Loader2 className="w-10 h-10 text-emerald-500 animate-spin mb-4" />
-                 <p className="text-gray-500 font-medium">Memuat Database...</p>
+                 <p className="text-gray-500 font-medium">Memuat Database ({isCloud ? 'Online' : 'Lokal'})...</p>
                </div>
             ) : (
               <LandTable 

@@ -1,6 +1,6 @@
 import React, { useMemo, useRef, useState, useEffect } from 'react';
 import { LandRecord, MeasurementStatus, Village, User } from '../types';
-import { Trash2, FileText, MapPin, Edit, PlusCircle, Home, Download, Upload, FileSpreadsheet, ChevronLeft, ChevronRight, Search, Lock } from 'lucide-react';
+import { Trash2, FileText, MapPin, Edit, PlusCircle, Home, Download, Upload, FileSpreadsheet, ChevronLeft, ChevronRight, Search, Lock, Filter, ArrowUpDown, X, SortAsc, SortDesc } from 'lucide-react';
 import * as XLSX_Module from 'xlsx';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -25,6 +25,11 @@ export const LandTable: React.FC<LandTableProps> = ({ records, onDelete, onEdit,
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState<string>('SEMUA');
   
+  // Advanced Filters State
+  const [filterStatus, setFilterStatus] = useState<string>('ALL');
+  // Removed filterBlock state as requested
+  const [sortBy, setSortBy] = useState<string>('gu_asc');
+  
   // Permissions helpers
   const canAdd = currentUser?.permissions.canAdd || currentUser?.isSuperAdmin;
   const canEdit = currentUser?.permissions.canEdit || currentUser?.isSuperAdmin;
@@ -32,10 +37,10 @@ export const LandTable: React.FC<LandTableProps> = ({ records, onDelete, onEdit,
   const canExportImport = currentUser?.permissions.canExportImport || currentUser?.isSuperAdmin;
   const isLoggedIn = !!currentUser;
   
-  // Reset pagination when records change (e.g. filter or new addition) or search/tab changes
+  // Reset pagination when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [records.length, searchTerm, activeTab]);
+  }, [records.length, searchTerm, activeTab, filterStatus, sortBy]);
 
   const getStatusColor = (status: MeasurementStatus) => {
     switch (status) {
@@ -297,11 +302,11 @@ export const LandTable: React.FC<LandTableProps> = ({ records, onDelete, onEdit,
     return counts;
   }, [records]);
 
-  // Filter records based on Active Tab AND Search Term
+  // Filter records based on Active Tab, Search Term AND Advanced Filters
   const filteredRecords = useMemo(() => {
     let data = records;
 
-    // 1. Filter by Village Tab
+    // 1. Filter by Village Tab (Now also controlled by dropdown)
     if (activeTab !== 'SEMUA') {
       data = data.filter(r => r.village === activeTab);
     }
@@ -319,8 +324,14 @@ export const LandTable: React.FC<LandTableProps> = ({ records, onDelete, onEdit,
         record.remarks.toLowerCase().includes(lowerTerm)
       );
     }
+
+    // 3. Filter by Status
+    if (filterStatus !== 'ALL') {
+      data = data.filter(r => r.status === filterStatus);
+    }
+
     return data;
-  }, [records, searchTerm, activeTab]);
+  }, [records, searchTerm, activeTab, filterStatus]);
 
   const groupedRecords = useMemo(() => {
     const groups: Record<string, LandRecord[]> = {};
@@ -334,13 +345,42 @@ export const LandTable: React.FC<LandTableProps> = ({ records, onDelete, onEdit,
       groups[key].push(r);
     });
     
-    // Sort groups by the most recent createdAt in the group
-    return Object.entries(groups).sort(([, a], [, b]) => {
-       const maxA = Math.max(...a.map(r => r.createdAt));
-       const maxB = Math.max(...b.map(r => r.createdAt));
-       return maxB - maxA;
+    // Convert to array for sorting
+    const groupEntries = Object.entries(groups);
+
+    // SORTING LOGIC
+    groupEntries.sort(([, groupA], [, groupB]) => {
+      // Helper to get representative value for the group (first item)
+      const a = groupA[0];
+      const b = groupB[0];
+      const maxDateA = Math.max(...groupA.map(r => r.createdAt));
+      const maxDateB = Math.max(...groupB.map(r => r.createdAt));
+
+      // Use logic to get the No. GU for sorting
+      const guA = a.noGu || '';
+      const guB = b.noGu || '';
+
+      switch (sortBy) {
+        case 'newest':
+          return maxDateB - maxDateA;
+        case 'oldest':
+          return maxDateA - maxDateB;
+        case 'gu_asc': // Renamed from name_asc, logic changed to GU natural sort
+          return guA.localeCompare(guB, undefined, { numeric: true, sensitivity: 'base' });
+        case 'gu_desc': // Renamed from name_desc, logic changed to GU natural sort
+          return guB.localeCompare(guA, undefined, { numeric: true, sensitivity: 'base' });
+        case 'area_high':
+          return b.area - a.area;
+        case 'area_low':
+          return a.area - b.area;
+        default:
+          // Default to GU Ascending if it's the default, or Newest
+          return guA.localeCompare(guB, undefined, { numeric: true, sensitivity: 'base' });
+      }
     });
-  }, [filteredRecords]);
+
+    return groupEntries;
+  }, [filteredRecords, sortBy]);
 
   // PAGINATION LOGIC
   const totalPages = Math.ceil(groupedRecords.length / ITEMS_PER_PAGE);
@@ -354,6 +394,15 @@ export const LandTable: React.FC<LandTableProps> = ({ records, onDelete, onEdit,
       setCurrentPage(page);
     }
   };
+
+  const clearFilters = () => {
+    setSearchTerm('');
+    setFilterStatus('ALL');
+    setActiveTab('SEMUA'); // Reset village filter
+    setSortBy('gu_asc');
+  };
+
+  const hasActiveFilters = searchTerm || filterStatus !== 'ALL' || activeTab !== 'SEMUA';
 
   // Empty State View (only if no records at all in the database)
   if (records.length === 0) {
@@ -447,77 +496,143 @@ export const LandTable: React.FC<LandTableProps> = ({ records, onDelete, onEdit,
           ))}
       </div>
 
-      <div className="px-6 py-4 border-b border-gray-100 flex flex-col lg:flex-row justify-between items-center bg-gray-50 gap-4">
-        <div className="flex items-center gap-4 w-full lg:w-auto">
-             <h3 className="font-semibold text-gray-800 whitespace-nowrap hidden lg:block">
-               Daftar Bidang
-             </h3>
-             <div className="relative flex-1 lg:w-72">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Search className="h-4 w-4 text-gray-400" />
-                </div>
-                <input
-                  type="text"
-                  className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm transition duration-150 ease-in-out"
-                  placeholder="Cari pemilik, GU, dokumen..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
-             </div>
+      <div className="px-6 py-4 border-b border-gray-100 flex flex-col gap-4 bg-gray-50">
+        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+          <div className="flex items-center gap-4 w-full lg:w-auto">
+              <h3 className="font-semibold text-gray-800 whitespace-nowrap hidden lg:block">
+                Daftar Bidang
+              </h3>
+              <div className="relative flex-1 lg:w-72">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <Search className="h-4 w-4 text-gray-400" />
+                  </div>
+                  <input
+                    type="text"
+                    className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm transition duration-150 ease-in-out"
+                    placeholder="Cari pemilik, GU, dokumen..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                  />
+              </div>
+          </div>
+          
+          <div className="flex flex-wrap items-center gap-2 justify-end w-full lg:w-auto">
+            {isLoggedIn ? (
+              <>
+                {canExportImport && (
+                  <>
+                    <button 
+                      onClick={handleDownloadTemplate}
+                      className="text-sm flex items-center text-gray-600 bg-white hover:bg-gray-50 border border-gray-200 font-medium px-3 py-1.5 rounded-lg transition-colors"
+                      title="Download Template Excel"
+                    >
+                      <FileSpreadsheet className="w-4 h-4 mr-1.5 hidden sm:inline" />
+                      Templt
+                    </button>
+
+                    <button 
+                      onClick={handleUploadClick}
+                      className="text-sm flex items-center text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 font-medium px-3 py-1.5 rounded-lg transition-colors"
+                      title="Upload Excel"
+                    >
+                      <Upload className="w-4 h-4 mr-1.5 hidden sm:inline" />
+                      Upload
+                    </button>
+
+                    <button 
+                      onClick={handleDownloadExcel}
+                      className="text-sm flex items-center text-green-700 bg-green-50 hover:bg-green-100 border border-green-200 font-medium px-3 py-1.5 rounded-lg transition-colors"
+                      title="Download Excel"
+                    >
+                      <Download className="w-4 h-4 mr-1.5 hidden sm:inline" />
+                      Excel
+                    </button>
+                  </>
+                )}
+                
+                {canAdd && (
+                  <button 
+                    onClick={onAddNew}
+                    className="text-sm flex items-center text-white bg-emerald-600 hover:bg-emerald-700 font-medium px-3 py-1.5 rounded-lg transition-colors"
+                  >
+                    <PlusCircle className="w-4 h-4 mr-1.5" />
+                    Baru
+                  </button>
+                )}
+              </>
+            ) : (
+              <div className="flex items-center text-gray-500 text-xs italic bg-white px-3 py-1.5 rounded border border-gray-200">
+                  <Lock className="w-3 h-3 mr-1.5" />
+                  Mode Lihat
+              </div>
+            )}
+          </div>
         </div>
-        
-        <div className="flex flex-wrap items-center gap-2 justify-end w-full lg:w-auto">
-          {isLoggedIn ? (
-            <>
-              {canExportImport && (
-                <>
-                  <button 
-                    onClick={handleDownloadTemplate}
-                    className="text-sm flex items-center text-gray-600 bg-white hover:bg-gray-50 border border-gray-200 font-medium px-3 py-1.5 rounded-lg transition-colors"
-                    title="Download Template Excel"
-                  >
-                    <FileSpreadsheet className="w-4 h-4 mr-1.5" />
-                    Templt
-                  </button>
 
-                  <button 
-                    onClick={handleUploadClick}
-                    className="text-sm flex items-center text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 font-medium px-3 py-1.5 rounded-lg transition-colors"
-                    title="Upload Excel"
-                  >
-                    <Upload className="w-4 h-4 mr-1.5" />
-                    Upload
-                  </button>
+        {/* ADVANCED FILTER BAR */}
+        <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-gray-200/50">
+          <div className="flex items-center text-xs text-gray-500 font-medium mr-1">
+            <Filter className="w-3.5 h-3.5 mr-1" />
+            Filter & Sort:
+          </div>
 
-                  <button 
-                    onClick={handleDownloadExcel}
-                    className="text-sm flex items-center text-green-700 bg-green-50 hover:bg-green-100 border border-green-200 font-medium px-3 py-1.5 rounded-lg transition-colors"
-                    title="Download Excel"
-                  >
-                    <Download className="w-4 h-4 mr-1.5" />
-                    Excel
-                  </button>
-                </>
-              )}
-              
-              {canAdd && (
-                <button 
-                  onClick={onAddNew}
-                  className="text-sm flex items-center text-white bg-emerald-600 hover:bg-emerald-700 font-medium px-3 py-1.5 rounded-lg transition-colors"
-                >
-                  <PlusCircle className="w-4 h-4 mr-1.5" />
-                  Baru
-                </button>
-              )}
-            </>
-          ) : (
-             <div className="flex items-center text-gray-500 text-xs italic bg-white px-3 py-1.5 rounded border border-gray-200">
-                <Lock className="w-3 h-3 mr-1.5" />
-                Mode Lihat (Login untuk Edit)
-             </div>
+          {/* Filter Status */}
+          <select
+            value={filterStatus}
+            onChange={(e) => setFilterStatus(e.target.value)}
+            className="text-xs border border-gray-300 rounded px-2 py-1.5 bg-white text-gray-700 focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500"
+          >
+            <option value="ALL">Semua Status</option>
+            {Object.values(MeasurementStatus).map(s => (
+              <option key={s} value={s}>{s}</option>
+            ))}
+          </select>
+
+          {/* Filter Village (Replaces Block Filter) */}
+          <select
+            value={activeTab}
+            onChange={(e) => setActiveTab(e.target.value)}
+            className="text-xs border border-gray-300 rounded px-2 py-1.5 bg-white text-gray-700 focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 max-w-[150px]"
+          >
+            <option value="SEMUA">Semua Desa</option>
+            {Object.values(Village).map(v => (
+              <option key={v} value={v}>{v}</option>
+            ))}
+          </select>
+
+          {/* Divider */}
+          <div className="h-4 w-px bg-gray-300 mx-1"></div>
+
+          {/* Sort By */}
+          <div className="flex items-center">
+            <ArrowUpDown className="w-3.5 h-3.5 text-gray-400 mr-1.5" />
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value)}
+              className="text-xs border border-gray-300 rounded px-2 py-1.5 bg-white text-gray-700 focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500"
+            >
+              <option value="gu_asc">No. GU (A-Z)</option>
+              <option value="gu_desc">No. GU (Z-A)</option>
+              <option value="newest">Terbaru Diinput</option>
+              <option value="oldest">Terlama Diinput</option>
+              <option value="area_high">Luas (Terbesar)</option>
+              <option value="area_low">Luas (Terkecil)</option>
+            </select>
+          </div>
+
+          {/* Reset Filters */}
+          {hasActiveFilters && (
+            <button
+              onClick={clearFilters}
+              className="ml-auto text-xs flex items-center text-red-600 hover:text-red-700 hover:bg-red-50 px-2 py-1 rounded transition-colors"
+            >
+              <X className="w-3 h-3 mr-1" />
+              Reset
+            </button>
           )}
         </div>
       </div>
+
       <div className="overflow-x-auto">
         <table className="w-full text-sm text-left">
           <thead className="text-xs text-gray-500 uppercase bg-gray-50 border-b">
@@ -536,7 +651,9 @@ export const LandTable: React.FC<LandTableProps> = ({ records, onDelete, onEdit,
                         <div className="flex flex-col items-center justify-center">
                            <Home className="w-10 h-10 text-gray-200 mb-2" />
                            <p>Tidak ada data ditemukan untuk filter ini.</p>
-                           {searchTerm && <p className="text-xs text-gray-400 mt-1">Kata kunci: "{searchTerm}"</p>}
+                           {hasActiveFilters && (
+                             <p className="text-xs text-gray-400 mt-1">Coba reset filter atau ubah kata kunci pencarian.</p>
+                           )}
                         </div>
                     </td>
                 </tr>
