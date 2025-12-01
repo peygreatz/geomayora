@@ -1,0 +1,6 @@
+{
+  "appId": "com.geomayora.app",
+  "appName": "GeoMayora",
+  "webDir": "dist",
+  "bundledWebRuntime": false
+}
