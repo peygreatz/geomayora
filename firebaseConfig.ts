@@ -13,13 +13,12 @@ import { getFirestore } from 'firebase/firestore';
 // ===============================================================================
 
 const firebaseConfig = {
-  // GANTI DENGAN DATA DARI FIREBASE CONSOLE ANDA
-  apiKey: "API_KEY_PALSU_GANTI_INI", 
-  authDomain: "geomayora-app.firebaseapp.com",
-  projectId: "geomayora-app",
-  storageBucket: "geomayora-app.appspot.com",
-  messagingSenderId: "123456789",
-  appId: "1:123456789:web:abcdef"
+  apiKey: "AIzaSyD-bZguUyYOEij3jYDgYnKcAzw0Vz9xWqc",
+  authDomain: "geomayora.firebaseapp.com",
+  projectId: "geomayora",
+  storageBucket: "geomayora.firebasestorage.app",
+  messagingSenderId: "240250059000",
+  appId: "1:240250059000:web:ad6ea54b9a6ef024b3630d"
 };
 
 let db: any = null;
