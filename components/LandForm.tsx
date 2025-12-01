@@ -1,6 +1,7 @@
+
 import React, { useState, useEffect } from 'react';
 import { LandRecordFormData, MeasurementStatus, LandRecord, Village, User } from '../types';
-import { Save, Wand2, Loader2, Eraser, Edit2, XCircle, Info } from 'lucide-react';
+import { Save, Wand2, Loader2, Eraser, Edit2, XCircle, Info, Link as LinkIcon } from 'lucide-react';
 import { generateSmartRemarks } from '../services/geminiService';
 
 interface LandFormProps {
@@ -13,6 +14,7 @@ interface LandFormProps {
 
 const initialData: LandRecordFormData = {
   noGu: '',
+  fileLink: '',
   ownerName: '',
   village: Village.DANGDEUR,
   block: '',
@@ -27,6 +29,7 @@ export const LandForm: React.FC<LandFormProps> = ({ onSubmit, editingRecord, onC
   const [formData, setFormData] = useState<LandRecordFormData>(initialData);
   const [isGenerating, setIsGenerating] = useState(false);
   const [autoFilled, setAutoFilled] = useState(false);
+  const [linkAutoFilled, setLinkAutoFilled] = useState(false);
 
   // Populate form when editingRecord changes
   useEffect(() => {
@@ -36,13 +39,36 @@ export const LandForm: React.FC<LandFormProps> = ({ onSubmit, editingRecord, onC
       setFormData({
         ...rest,
         // Ensure village has a value for legacy records that might not have it
-        village: rest.village || Village.DANGDEUR
+        village: rest.village || Village.DANGDEUR,
+        fileLink: rest.fileLink || ''
       });
       setAutoFilled(false);
+      setLinkAutoFilled(false);
     } else {
       setFormData(initialData);
     }
   }, [editingRecord]);
+
+  // Auto-fill FILE LINK based on NO. GU
+  // If the same GU exists, we assume the map file/link is the same.
+  useEffect(() => {
+    if (!editingRecord && formData.noGu && existingRecords.length > 0) {
+      // Find any record with the same GU that HAS a link
+      const matchGu = existingRecords.find(
+        (r) => r.noGu.trim().toLowerCase() === formData.noGu.trim().toLowerCase() && r.fileLink && r.fileLink.length > 0
+      );
+
+      if (matchGu) {
+        setFormData((prev) => ({
+          ...prev,
+          fileLink: matchGu.fileLink || ''
+        }));
+        setLinkAutoFilled(true);
+      } else {
+        setLinkAutoFilled(false);
+      }
+    }
+  }, [formData.noGu, editingRecord, existingRecords]);
 
   // Auto-fill effect when typing Document Number
   useEffect(() => {
@@ -56,6 +82,7 @@ export const LandForm: React.FC<LandFormProps> = ({ onSubmit, editingRecord, onC
         setFormData((prev) => ({
           ...prev,
           noGu: match.noGu,
+          // fileLink: match.fileLink || '', // Logic moved to GU dependency above, but this triggers it via setting noGu
           village: match.village as Village || Village.DANGDEUR,
           block: match.block,
           plotNumber: match.plotNumber,
@@ -101,6 +128,7 @@ export const LandForm: React.FC<LandFormProps> = ({ onSubmit, editingRecord, onC
     if (!editingRecord) {
       setFormData(initialData);
       setAutoFilled(false);
+      setLinkAutoFilled(false);
       alert("Data berhasil disimpan.");
     } else {
       alert("Perubahan berhasil disimpan.");
@@ -120,6 +148,7 @@ export const LandForm: React.FC<LandFormProps> = ({ onSubmit, editingRecord, onC
     } else {
       setFormData(initialData);
       setAutoFilled(false);
+      setLinkAutoFilled(false);
     }
   };
 
@@ -147,7 +176,7 @@ export const LandForm: React.FC<LandFormProps> = ({ onSubmit, editingRecord, onC
           <div className="md:col-span-2 bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-start">
             <Info className="w-5 h-5 text-blue-600 mr-2 mt-0.5" />
             <div className="text-sm text-blue-800">
-              <span className="font-semibold">Data Ditemukan:</span> Informasi GU, Desa, Blok, Bidang, dan Luas telah diisi otomatis berdasarkan No. Dokumen yang sama.
+              <span className="font-semibold">Data Dokumen Ditemukan:</span> Informasi GU, Desa, Blok, Bidang, dan Luas telah diisi otomatis.
             </div>
           </div>
         )}
@@ -179,6 +208,30 @@ export const LandForm: React.FC<LandFormProps> = ({ onSubmit, editingRecord, onC
             placeholder="Cth: N1"
             className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-colors"
           />
+        </div>
+
+        {/* FILE LINK */}
+        <div className="md:col-span-2">
+           <label className="block text-sm font-medium text-gray-700 mb-1">Link File / Google Drive / Foto</label>
+           <div className="relative">
+             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <LinkIcon className="h-4 w-4 text-gray-400" />
+             </div>
+             <input
+                type="text"
+                name="fileLink"
+                value={formData.fileLink}
+                onChange={handleChange}
+                placeholder="https://drive.google.com/..."
+                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-colors"
+             />
+           </div>
+           {linkAutoFilled && (
+             <p className="text-xs text-blue-600 mt-1 flex items-center">
+               <Info className="w-3 h-3 mr-1" />
+               Link otomatis terisi dari data GU yang sama.
+             </p>
+           )}
         </div>
 
         {/* NO DOKUMEN */}

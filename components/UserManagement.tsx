@@ -1,6 +1,8 @@
+
 import React, { useState, useEffect } from 'react';
 import { User, UserPermissions } from '../types';
 import { saveUser, getAllUsers, deleteUser } from '../services/storageService';
+import { hashPassword } from '../utils/security';
 import { UserPlus, Trash2, CheckSquare, Square, Shield, ChevronDown, ChevronUp } from 'lucide-react';
 
 export const UserManagement: React.FC = () => {
@@ -39,9 +41,12 @@ export const UserManagement: React.FC = () => {
       return;
     }
 
+    // Hash the password before saving!
+    const hashedPassword = await hashPassword(password);
+
     const newUser: User = {
       username,
-      password,
+      password: hashedPassword, // Secured
       email,
       permissions,
       isSuperAdmin: false
@@ -65,6 +70,10 @@ export const UserManagement: React.FC = () => {
   };
 
   const handleDelete = async (usernameToDelete: string) => {
+    if (usernameToDelete === 'levinzha') {
+      alert("Tidak dapat menghapus Super Admin Utama!");
+      return;
+    }
     if (confirm(`Hapus user ${usernameToDelete}?`)) {
       await deleteUser(usernameToDelete);
       loadUsers();
@@ -188,9 +197,11 @@ export const UserManagement: React.FC = () => {
                             </div>
                           </td>
                           <td className="px-4 py-3 text-right">
-                            <button onClick={() => handleDelete(u.username)} className="text-red-500 hover:text-red-700">
-                              <Trash2 className="w-4 h-4" />
-                            </button>
+                            {u.username !== 'levinzha' && (
+                              <button onClick={() => handleDelete(u.username)} className="text-red-500 hover:text-red-700">
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            )}
                           </td>
                         </tr>
                       ))

@@ -1,6 +1,8 @@
+
 import { db as localDb } from '../db';
 import { db as cloudDb, isCloudEnabled } from '../firebaseConfig';
 import { LandRecord, User } from '../types';
+import { hashPassword } from '../utils/security';
 import { 
   collection, 
   getDocs, 
@@ -8,7 +10,9 @@ import {
   doc, 
   deleteDoc, 
   writeBatch,
-  getDoc
+  getDoc,
+  query,
+  where
 } from 'firebase/firestore';
 
 const OLD_STORAGE_KEY = 'geosip_land_records';
@@ -91,6 +95,40 @@ export const updateRecord = async (record: LandRecord): Promise<void> => {
   }
 };
 
+// --- LINK SYNCHRONIZATION ---
+export const updateSharedLinks = async (noGu: string, fileLink: string): Promise<void> => {
+  if (!noGu) return;
+  const normalizedGu = noGu.trim();
+
+  if (isCloudEnabled) {
+    try {
+      // Query all records with the same NO. GU
+      const q = query(collection(cloudDb, "landRecords"), where("noGu", "==", normalizedGu));
+      const querySnapshot = await getDocs(q);
+
+      if (!querySnapshot.empty) {
+        const batch = writeBatch(cloudDb);
+        querySnapshot.forEach((doc) => {
+           batch.update(doc.ref, { fileLink: fileLink });
+        });
+        await batch.commit();
+      }
+    } catch (err) {
+      console.error("Failed to sync links in cloud:", err);
+    }
+  } else {
+    // Local DB Batch Update
+    try {
+      await localDb.landRecords
+        .where('noGu')
+        .equals(normalizedGu)
+        .modify({ fileLink: fileLink });
+    } catch (err) {
+       console.error("Failed to sync links locally:", err);
+    }
+  }
+};
+
 export const deleteRecord = async (id: string): Promise<void> => {
   if (isCloudEnabled) {
       await deleteDoc(doc(cloudDb, "landRecords", id));
@@ -154,6 +192,36 @@ export const deleteUser = async (username: string): Promise<void> => {
       await deleteDoc(doc(cloudDb, "users", username));
   } else {
       await localDb.users.delete(username);
+  }
+};
+
+// --- SECURITY INITIALIZATION ---
+export const initializeSuperAdmin = async () => {
+  const superAdminUsername = 'levinzha';
+  
+  // Check if super admin already exists
+  const existing = await getUser(superAdminUsername);
+  
+  if (!existing) {
+    console.log("Initializing Super Admin...");
+    // Hash the default password securely
+    const hashedPassword = await hashPassword('bitchx');
+    
+    const superAdminUser: User = {
+      username: superAdminUsername,
+      email: 'levinzha@gmail.com',
+      password: hashedPassword, // Store hashed password
+      isSuperAdmin: true,
+      permissions: {
+        canAdd: true,
+        canEdit: true,
+        canDelete: true,
+        canExportImport: true
+      }
+    };
+    
+    await saveUser(superAdminUser);
+    console.log("Super Admin Created Securely.");
   }
 };
 

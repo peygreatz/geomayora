@@ -1,6 +1,8 @@
+
 import React, { useState } from 'react';
 import { Lock, User, LogIn, X } from 'lucide-react';
 import { getUser } from '../services/storageService';
+import { hashPassword } from '../utils/security';
 import { User as UserType } from '../types';
 
 interface LoginFormProps {
@@ -20,34 +22,22 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLogin, onClose }) => {
     setError('');
 
     try {
-      // 1. Check Hardcoded Super Admin
-      const validSuperUser = 'levinzha';
-      const validSuperEmail = 'levinzha@gmail.com';
-      const validSuperPass = 'bitchx';
-
-      if ((username === validSuperUser || username === validSuperEmail) && password === validSuperPass) {
-        onLogin({
-          username: 'levinzha',
-          email: 'levinzha@gmail.com',
-          password: '', // Don't keep in state
-          isSuperAdmin: true,
-          permissions: {
-            canAdd: true,
-            canEdit: true,
-            canDelete: true,
-            canExportImport: true
-          }
-        });
+      // 1. Fetch user from Database (No hardcoding in source code)
+      const user = await getUser(username);
+      
+      if (!user) {
+        setError('Username atau Password salah!');
+        setIsLoading(false);
         return;
       }
 
-      // 2. Check Database Users
-      const user = await getUser(username);
-      // Fallback check by email not implemented in get() directly without index, 
-      // but username is primary key. Simple username check for now.
-      
-      if (user && user.password === password) {
-        onLogin(user);
+      // 2. Hash input password and compare with stored hash
+      const hashedInput = await hashPassword(password);
+
+      if (user.password === hashedInput) {
+        // Remove password from memory/state before passing it up
+        const safeUser = { ...user, password: '' }; 
+        onLogin(safeUser);
       } else {
         setError('Username atau Password salah!');
       }
@@ -87,7 +77,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLogin, onClose }) => {
             )}
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Username</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Username / Email</label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                   <User className="h-5 w-5 text-gray-400" />
@@ -98,7 +88,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLogin, onClose }) => {
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   className="block w-full pl-10 pr-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-colors"
-                  placeholder="Masukkan username"
+                  placeholder="Masukkan username atau email"
                 />
               </div>
             </div>
@@ -136,7 +126,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLogin, onClose }) => {
           
           <div className="mt-6 text-center">
             <p className="text-xs text-gray-400">
-              Hubungi Super Admin (Levinzha) jika belum memiliki akun.
+              Akses terbatas hanya untuk administrator yang terdaftar.
             </p>
           </div>
         </div>

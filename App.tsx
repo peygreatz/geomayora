@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState, useMemo } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { Map, LayoutDashboard, Database, Home, LandPlot, CheckCircle2, Clock, Loader2, Smartphone, LogIn, LogOut, ShieldCheck, Cloud, WifiOff } from 'lucide-react';
@@ -6,7 +7,7 @@ import { LandTable } from './components/LandTable';
 import { LoginForm } from './components/LoginForm';
 import { UserManagement } from './components/UserManagement';
 import { LandRecord, LandRecordFormData, MeasurementStatus, Village, User } from './types';
-import { getRecords, saveRecord, updateRecord, deleteRecord, saveManyRecords, getStorageStatus } from './services/storageService';
+import { getRecords, saveRecord, updateRecord, deleteRecord, saveManyRecords, getStorageStatus, initializeSuperAdmin, updateSharedLinks } from './services/storageService';
 
 const App: React.FC = () => {
   const [records, setRecords] = useState<LandRecord[]>([]);
@@ -21,12 +22,16 @@ const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [showLoginModal, setShowLoginModal] = useState(false);
 
-  // Load data asynchronously
+  // Initialize DB and Load data
   useEffect(() => {
     const loadData = async () => {
       setIsLoading(true);
       try {
         setStorageStatus(getStorageStatus());
+        
+        // Ensure Super Admin exists in DB (Seeding)
+        await initializeSuperAdmin();
+        
         const data = await getRecords();
         // Sort by most recent
         setRecords(data.sort((a, b) => b.createdAt - a.createdAt));
@@ -105,23 +110,35 @@ const App: React.FC = () => {
     }
 
     setIsLoading(true);
-    if (editingRecord) {
-      // Update existing record
-      const updatedRecord: LandRecord = {
-        ...editingRecord,
-        ...data,
-      };
-      await updateRecord(updatedRecord);
-      setEditingRecord(null);
-    } else {
-      // Create new record
-      const newRecord: LandRecord = {
-        ...data,
-        id: uuidv4(),
-        createdAt: Date.now(),
-      };
-      await saveRecord(newRecord);
+    try {
+      if (editingRecord) {
+        // Update existing record
+        const updatedRecord: LandRecord = {
+          ...editingRecord,
+          ...data,
+        };
+        await updateRecord(updatedRecord);
+        setEditingRecord(null);
+      } else {
+        // Create new record
+        const newRecord: LandRecord = {
+          ...data,
+          id: uuidv4(),
+          createdAt: Date.now(),
+        };
+        await saveRecord(newRecord);
+      }
+
+      // SYNC LINKS: Update ALL records with the same GU to have the same link
+      if (data.noGu) {
+         await updateSharedLinks(data.noGu, data.fileLink || '');
+      }
+
+    } catch (error) {
+      console.error("Save Error", error);
+      alert("Gagal menyimpan data.");
     }
+
     setRefreshTrigger(prev => prev + 1);
   };
 
@@ -133,6 +150,10 @@ const App: React.FC = () => {
     }
     setIsLoading(true);
     await saveManyRecords(newRecords);
+    
+    // Potentially sync links after import, but might be too heavy for bulk. 
+    // Usually import already contains correct data.
+    
     setRefreshTrigger(prev => prev + 1);
   };
 

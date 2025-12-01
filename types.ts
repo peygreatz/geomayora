@@ -1,3 +1,4 @@
+
 export enum MeasurementStatus {
   PENDING = 'Belum Diukur',
   IN_PROGRESS = 'Sedang Diukur',
@@ -15,6 +16,7 @@ export enum Village {
 export interface LandRecord {
   id: string;
   noGu: string;         // NO. GU
+  fileLink?: string;    // LINK FILE (Google Drive / Etc)
   ownerName: string;    // NAMA PEMILIK
   village: string;      // DESA
   block: string;        // BLOK

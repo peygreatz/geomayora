@@ -1,6 +1,7 @@
+
 import React, { useMemo, useRef, useState, useEffect } from 'react';
 import { LandRecord, MeasurementStatus, Village, User } from '../types';
-import { Trash2, FileText, MapPin, Edit, PlusCircle, Home, Download, Upload, FileSpreadsheet, ChevronLeft, ChevronRight, Search, Lock, Filter, ArrowUpDown, X, SortAsc, SortDesc } from 'lucide-react';
+import { Trash2, FileText, MapPin, Edit, PlusCircle, Home, Download, Upload, FileSpreadsheet, ChevronLeft, ChevronRight, Search, Lock, Filter, ArrowUpDown, X, SortAsc, SortDesc, ExternalLink } from 'lucide-react';
 import * as XLSX_Module from 'xlsx';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -63,7 +64,8 @@ export const LandTable: React.FC<LandTableProps> = ({ records, onDelete, onEdit,
         'NO DOKUMEN': 'C 1234',
         'LUAS (m2)': 150,
         'STATUS': 'Belum Diukur',
-        'KETERANGAN': 'Tanah pekarangan'
+        'KETERANGAN': 'Tanah pekarangan',
+        'LINK FILE': 'https://drive.google.com/...'
       }
     ];
 
@@ -80,6 +82,7 @@ export const LandTable: React.FC<LandTableProps> = ({ records, onDelete, onEdit,
       { wch: 12 }, // LUAS
       { wch: 15 }, // STATUS
       { wch: 25 }, // KETERANGAN
+      { wch: 30 }, // LINK FILE
     ];
 
     const wb = XLSX.utils.book_new();
@@ -143,7 +146,8 @@ export const LandTable: React.FC<LandTableProps> = ({ records, onDelete, onEdit,
         'NO DOKUMEN': r.documentNumber,
         'LUAS (m2)': r.area,
         'STATUS': r.status,
-        'KETERANGAN': r.remarks
+        'KETERANGAN': r.remarks,
+        'LINK FILE': r.fileLink || ''
       }));
 
       // Create Worksheet
@@ -169,6 +173,7 @@ export const LandTable: React.FC<LandTableProps> = ({ records, onDelete, onEdit,
               s: { r: startIdx + 1, c: 6 },
               e: { r: i, c: 6 }
             });
+             // Merge LINK (Column 9/J) if identical? Maybe not, leave unmerged for now or merge if identical logic added
           }
           startIdx = i;
         }
@@ -201,6 +206,7 @@ export const LandTable: React.FC<LandTableProps> = ({ records, onDelete, onEdit,
         { wch: 12 }, // LUAS
         { wch: 15 }, // STATUS
         { wch: 45 }, // KETERANGAN
+        { wch: 30 }, // LINK
       ];
 
       // Enable AutoFilter
@@ -269,7 +275,8 @@ export const LandTable: React.FC<LandTableProps> = ({ records, onDelete, onEdit,
             documentNumber: row['NO DOKUMEN']?.toString() || '',
             area: parseFloat(row['LUAS (m2)']) || 0,
             status: mapStatus(row['STATUS']),
-            remarks: row['KETERANGAN']?.toString() || ''
+            remarks: row['KETERANGAN']?.toString() || '',
+            fileLink: row['LINK FILE']?.toString() || ''
           };
         });
 
@@ -662,6 +669,8 @@ export const LandTable: React.FC<LandTableProps> = ({ records, onDelete, onEdit,
                   const [gu, doc] = key.split('##SPLIT##');
                   // Take the area from the first record in the group as the "unified" area
                   const unifiedArea = group[0]?.area || 0;
+                  // Take file link from first record if available (assuming group shares file)
+                  const fileLink = group[0]?.fileLink;
     
                   return (
                   <React.Fragment key={key}>
@@ -674,6 +683,20 @@ export const LandTable: React.FC<LandTableProps> = ({ records, onDelete, onEdit,
                                 GU
                                 </span>
                                 <span className="truncate">{gu}</span>
+                                
+                                {fileLink && (
+                                  <a 
+                                    href={fileLink.startsWith('http') ? fileLink : `https://${fileLink}`} 
+                                    target="_blank" 
+                                    rel="noopener noreferrer"
+                                    className="ml-2 flex items-center text-blue-600 hover:text-blue-800 text-xs font-normal border border-blue-200 bg-white hover:bg-blue-50 px-2 py-0.5 rounded transition-colors"
+                                    title="Buka Link File"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    <ExternalLink className="w-3 h-3 mr-1" />
+                                    Buka Link
+                                  </a>
+                                )}
                             </div>
                             
                             <div className="flex items-center" title="Nomor Dokumen">
